@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2D Shooting Game - Mobile</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #222;
+      touch-action: none;
+    }
+    canvas {
+      background: url('eden.png') no-repeat center/cover;
+      display: block;
+    }
+    /* Mobile controls */
+    .controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    .btn {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 20px;
+      border: 2px solid #fff;
+      text-align: center;
+      line-height: 70px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .btn:active {
+      background: rgba(255, 255, 255, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Touch Controls -->
+  <div class="controls">
+    <div class="btn" id="left">⬅️</div>
+    <div class="btn" id="right">➡️</div>
+    <div class="btn" id="jump">⬆️</div>
+    <div class="btn" id="fire">🔫</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Load images
+    const playerImg = new Image();
+    playerImg.src = "Beren.png";
+    const botImg = new Image();
+    botImg.src = "b.png";
+
+    // Player & Bot setup
+    const player = {
+      x: 100,
+      y: canvas.height - 200,
+      width: 80,
+      height: 100,
+      speed: 8,
+      jumpPower: 18,
+      dy: 0,
+      onGround: true,
+      gravity: 1,
+      bullets: [],
+      canShoot: true,
+      reloadTime: 400,
+      direction: 1
+    };
+
+    const bot = {
+      x: canvas.width - 180,
+      y: canvas.height - 200,
+      width: 80,
+      height: 100,
+      speed: 4,
+      bullets: [],
+      canShoot: true,
+      reloadTime: 900,
+      direction: -1
+    };
+
+    let keys = {};
+    let gameOver = false;
+    let playerHP = 100;
+    let botHP = 100;
+
+    // Keyboard controls
+    window.addEventListener("keydown", (e) => (keys[e.key] = true));
+    window.addEventListener("keyup", (e) => (keys[e.key] = false));
+
+    // Touch buttons
+    const leftBtn = document.getElementById("left");
+    const rightBtn = document.getElementById("right");
+    const jumpBtn = document.getElementById("jump");
+    const fireBtn = document.getElementById("fire");
+
+    function addTouchControl(btn, key) {
+      btn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        keys[key] = true;
+      });
+      btn.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        keys[key] = false;
+      });
+    }
+
+    addTouchControl(leftBtn, "ArrowLeft");
+    addTouchControl(rightBtn, "ArrowRight");
+    addTouchControl(jumpBtn, "ArrowUp");
+    addTouchControl(fireBtn, " ");
+
+    function shoot(shooter) {
+      shooter.bullets.push({
+        x: shooter.x + (shooter.direction === 1 ? shooter.width : 0),
+        y: shooter.y + shooter.height / 2,
+        size: 8,
+        speed: shooter.direction * 10
+      });
+    }
+
+    // Simple AI for bot
+    function botLogic() {
+      if (Math.random() < 0.02) {
+        bot.direction = bot.x > player.x ? -1 : 1;
+      }
+      bot.x += bot.speed * bot.direction;
+      if (bot.x < 0) bot.x = 0;
+      if (bot.x + bot.width > canvas.width) bot.x = canvas.width - bot.width;
+
+      if (bot.canShoot && Math.random() < 0.03) {
+        shoot(bot);
+        bot.canShoot = false;
+        setTimeout(() => (bot.canShoot = true), bot.reloadTime);
+      }
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      // Player move left/right
+      if (keys["ArrowLeft"]) {
+        player.x -= player.speed;
+        player.direction = -1;
+      }
+      if (keys["ArrowRight"]) {
+        player.x += player.speed;
+        player.direction = 1;
+      }
+      player.x = Math.max(0, Math.min(player.x, canvas.width - player.width));
+
+      // Jump
+      if (keys["ArrowUp"] && player.onGround) {
+        player.dy = -player.jumpPower;
+        player.onGround = false;
+      }
+
+      // Gravity
+      player.y += player.dy;
+      player.dy += player.gravity;
+      if (player.y >= canvas.height - 200) {
+        player.y = canvas.height - 200;
+        player.dy = 0;
+        player.onGround = true;
+      }
+
+      // Shooting
+      if (keys[" "] && player.canShoot) {
+        shoot(player);
+        player.canShoot = false;
+        setTimeout(() => (player.canShoot = true), player.reloadTime);
+      }
+
+      // Bullets
+      function updateBullets(bullets, target, damageCallback) {
+        for (let i = bullets.length - 1; i >= 0; i--) {
+          const b = bullets[i];
+          b.x += b.speed;
+          if (b.x < 0 || b.x > canvas.width) {
+            bullets.splice(i, 1);
+            continue;
+          }
+          if (
+            b.x > target.x &&
+            b.x < target.x + target.width &&
+            b.y > target.y &&
+            b.y < target.y + target.height
+          ) {
+            bullets.splice(i, 1);
+            damageCallback(-10);
+          }
+        }
+      }
+
+      updateBullets(player.bullets, bot, (dmg) => (botHP += dmg));
+      updateBullets(bot.bullets, player, (dmg) => (playerHP += dmg));
+
+      botLogic();
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
+      ctx.drawImage(botImg, bot.x, bot.y, bot.width, bot.height);
+
+      ctx.fillStyle = "yellow";
+      player.bullets.forEach((b) => ctx.fillRect(b.x, b.y, b.size, b.size));
+      ctx.fillStyle = "red";
+      bot.bullets.forEach((b) => ctx.fillRect(b.x, b.y, b.size, b.size));
+
+      // HP Bars
+      ctx.fillStyle = "lime";
+      ctx.fillRect(20, 20, playerHP * 2, 20);
+      ctx.fillStyle = "red";
+      ctx.fillRect(canvas.width - 220, 20, botHP * 2, 20);
+      ctx.strokeStyle = "white";
+      ctx.strokeRect(20, 20, 200, 20);
+      ctx.strokeRect(canvas.width - 220, 20, 200, 20);
+
+      // Game over message
+      if (playerHP <= 0 || botHP <= 0) {
+        gameOver = true;
+        ctx.fillStyle = "white";
+        ctx.font = "50px Arial";
+        ctx.fillText(
+          playerHP <= 0 ? "Bot Wins!" : "You Win!",
+          canvas.width / 2 - 150,
+          canvas.height / 2
+        );
+      }
+    }
+
+    update();
+  </script>
+</body>
+</html>
