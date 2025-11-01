@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, orientation=landscape" />
+  <title>2D Shooting Game - Horizontal</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #222;
+      touch-action: none;
+    }
+    canvas {
+      background: url('eden.png') no-repeat center/cover;
+      display: block;
+    }
+    .controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 25px;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    .btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 24px;
+      border: 2px solid #fff;
+      text-align: center;
+      line-height: 80px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .btn:active {
+      background: rgba(255, 255, 255, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="btn" id="left">⬅️</div>
+    <div class="btn" id="right">➡️</div>
+    <div class="btn" id="jump">⬆️</div>
+    <div class="btn" id="fire">🔫</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Landscape-style size (16:9)
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    if (width > height) {
+      canvas.width = width;
+      canvas.height = height;
+    } else {
+      canvas.width = height; // rotate feel
+      canvas.height = width;
+    }
+
+    // Load character images
+    const playerImg = new Image();
+    playerImg.src = "Beren.png";
+    const botImg = new Image();
+    botImg.src = "b.png";
+
+    // Bigger characters
+    const player = {
+      x: 100,
+      y: canvas.height - 300,
+      width: 160,
+      height: 200,
+      speed: 10,
+      jumpPower: 22,
+      dy: 0,
+      onGround: true,
+      gravity: 1.2,
+      bullets: [],
+      canShoot: true,
+      reloadTime: 400,
+      direction: 1
+    };
+
+    const bot = {
+      x: canvas.width - 260,
+      y: canvas.height - 300,
+      width: 160,
+      height: 200,
+      speed: 5,
+      bullets: [],
+      canShoot: true,
+      reloadTime: 900,
+      direction: -1
+    };
+
+    let keys = {};
+    let gameOver = false;
+    let playerHP = 100;
+    let botHP = 100;
+
+    // Keyboard
+    window.addEventListener("keydown", (e) => (keys[e.key] = true));
+    window.addEventListener("keyup", (e) => (keys[e.key] = false));
+
+    // Touch controls
+    const buttons = {
+      left: document.getElementById("left"),
+      right: document.getElementById("right"),
+      jump: document.getElementById("jump"),
+      fire: document.getElementById("fire")
+    };
+    function addTouch(btn, key) {
+      btn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        keys[key] = true;
+      });
+      btn.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        keys[key] = false;
+      });
+    }
+    addTouch(buttons.left, "ArrowLeft");
+    addTouch(buttons.right, "ArrowRight");
+    addTouch(buttons.jump, "ArrowUp");
+    addTouch(buttons.fire, " ");
+
+    function shoot(shooter) {
+      shooter.bullets.push({
+        x: shooter.x + (shooter.direction === 1 ? shooter.width : 0),
+        y: shooter.y + shooter.height / 2,
+        size: 10,
+        speed: shooter.direction * 12
+      });
+    }
+
+    function botLogic() {
+      if (Math.random() < 0.02) {
+        bot.direction = bot.x > player.x ? -1 : 1;
+      }
+      bot.x += bot.speed * bot.direction;
+      if (bot.x < 0) bot.x = 0;
+      if (bot.x + bot.width > canvas.width) bot.x = canvas.width - bot.width;
+
+      if (bot.canShoot && Math.random() < 0.04) {
+        shoot(bot);
+        bot.canShoot = false;
+        setTimeout(() => (bot.canShoot = true), bot.reloadTime);
+      }
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      if (keys["ArrowLeft"]) {
+        player.x -= player.speed;
+        player.direction = -1;
+      }
+      if (keys["ArrowRight"]) {
+        player.x += player.speed;
+        player.direction = 1;
+      }
+      player.x = Math.max(0, Math.min(player.x, canvas.width - player.width));
+
+      if (keys["ArrowUp"] && player.onGround) {
+        player.dy = -player.jumpPower;
+        player.onGround = false;
+      }
+
+      player.y += player.dy;
+      player.dy += player.gravity;
+      if (player.y >= canvas.height - 300) {
+        player.y = canvas.height - 300;
+        player.dy = 0;
+        player.onGround = true;
+      }
+
+      if (keys[" "] && player.canShoot) {
+        shoot(player);
+        player.canShoot = false;
+        setTimeout(() => (player.canShoot = true), player.reloadTime);
+      }
+
+      function updateBullets(bullets, target, damageCallback) {
+        for (let i = bullets.length - 1; i >= 0; i--) {
+          const b = bullets[i];
+          b.x += b.speed;
+          if (b.x < 0 || b.x > canvas.width) {
+            bullets.splice(i, 1);
+            continue;
+          }
+          if (
+            b.x > target.x &&
+            b.x < target.x + target.width &&
+            b.y > target.y &&
+            b.y < target.y + target.height
+          ) {
+            bullets.splice(i, 1);
+            damageCallback(-10);
+          }
+        }
+      }
+
+      updateBullets(player.bullets, bot, (dmg) => (botHP += dmg));
+      updateBullets(bot.bullets, player, (dmg) => (playerHP += dmg));
+
+      botLogic();
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
+      ctx.drawImage(botImg, bot.x, bot.y, bot.width, bot.height);
+
+      // ground
+      ctx.fillStyle = "#444";
+      ctx.fillRect(0, canvas.height - 100, canvas.width, 10);
+
+      ctx.fillStyle = "yellow";
+      player.bullets.forEach((b) => ctx.fillRect(b.x, b.y, b.size, b.size));
+      ctx.fillStyle = "red";
+      bot.bullets.forEach((b) => ctx.fillRect(b.x, b.y, b.size, b.size));
+
+      // HP bars
+      ctx.fillStyle = "lime";
+      ctx.fillRect(20, 20, playerHP * 2, 20);
+      ctx.fillStyle = "red";
+      ctx.fillRect(canvas.width - 220, 20, botHP * 2, 20);
+      ctx.strokeStyle = "white";
+      ctx.strokeRect(20, 20, 200, 20);
+      ctx.strokeRect(canvas.width - 220, 20, 200, 20);
+
+      if (playerHP <= 0 || botHP <= 0) {
+        gameOver = true;
+        ctx.fillStyle = "white";
+        ctx.font = "60px Arial";
+        ctx.fillText(
+          playerHP <= 0 ? "Bot Wins!" : "You Win!",
+          canvas.width / 2 - 160,
+          canvas.height / 2
+        );
+      }
+    }
+
+    update();
+  </script>
+</body>
+</html>
